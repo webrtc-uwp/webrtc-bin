@@ -3,30 +3,42 @@
 :: Author:    Sergej Jovanovic
 :: Email:     sergej@gnedo.com
 :: Twitter:   @JovanovicSergej
-:: Revision:  September 2016 - initial version
+:: Revision:  August 2017 - ORTC moving to GN build system
 
 @ECHO off
 
 SETLOCAL ENABLEEXTENSIONS ENABLEDELAYEDEXPANSION
 
+SET DEPOT_TOOLS_WIN_TOOLCHAIN=0
+
 ::paths
 SET powershell_path=%SYSTEMROOT%\System32\WindowsPowerShell\v1.0\powershell.exe
 SET curlPath=ortc\xplatform\curl
-SET ortcWebRTCTemplatePath=ortc\windows\templates\libs\webrtc\webrtcForOrtc.vs2015.sln
-SET ortcWebRTCDestinationPath=webrtc\xplatform\webrtc\webrtcForOrtc.vs2015.sln
-SET ortcWebRTCWin32TemplatePath=ortc\windows\templates\libs\webrtc\webrtcForOrtc.Win32.vs2015.sln
-SET ortcWebRTCWin32DestinationPath=webrtc\xplatform\webrtc\webrtcForOrtc.Win32.vs2015.sln
 SET webRTCTemplatePath=webrtc\windows\templates\libs\webrtc\webrtcLib.sln
 SET webRTCDestinationPath=webrtc\xplatform\webrtc\webrtcLib.sln
+SET ortciOSBinariesDestinationFolder=ortc\apple\libs\
+SET ortciOSBinariesDestinationPath=ortc\apple\libs\libOrtc.dylib
+SET webrtcGnPath=webrtc\xplatform\webrtc\
+SET ortcGnPath=webrtc\xplatform\webrtc\third_party\ortc\
+SET webrtcGnBuildPathDestination=webrtc\xplatform\webrtc\BUILD.gn
+SET ortcGnBuildPath=ortc\xplatform\templates\gn\ortc_BUILD.gn
+SET ortcGnBuildPathDestination=webrtc\xplatform\webrtc\third_party\ortc\BUILD.gn
+
+SET idlGnBuildPath=webrtc\xplatform\templates\gn\idl_BUILD.gn
+SET idlGnBuildPathDestination=webrtc\xplatform\webrtc\third_party\idl\BUILD.gn
+SET pythonPipPath=C:\Python27\Scripts
+SET pywin32VersionFile=C:\Python27\Lib\site-packages\pywin32.version.txt
 
 ::downloads
-SET pythonVersion=2.7.6
-SET ninjaVersion=v1.6.0
+SET pythonVersion=2.7.15
 SET pythonDestinationPath=python-%pythonVersion%.msi
-SET ninjaDestinationPath=.\bin\ninja-win.zip
+SET pythonPipDestinationPath=get-pip.py
+SET ortcBinariesDestinationPath=ortc\windows\projects\msvc\OrtcBinding\libOrtc.dylib
+ 
 ::urls
 SET pythonDownloadUrl=https://www.python.org/ftp/python/%pythonVersion%/python-%pythonVersion%.msi
-SET ninjaDownloadUrl=https://github.com/ninja-build/ninja/releases/download/%ninjaVersion%/ninja-win.zip
+SET pythonPipUrl=https://bootstrap.pypa.io/get-pip.py
+SET binariesGitPath=https://github.com/ortclib/ortc-binaries.git
 
 ::helper flags
 SET taskFailed=0
@@ -36,15 +48,19 @@ SET endingTime=0
 SET defaultProperties=0
 
 ::targets
-SET prepare_ORTC_Environemnt=0
-SET prepare_WebRTC_Environemnt=0
+SET prepare_ORTC_Environment=0
+SET prepare_WebRTC_Environment=0
 
 ::platforms
-SET platform_ARM=1
-SET platform_x86=1
-SET platform_x64=1
-SET platform_win32=1
-SET platform_win32_x64=0
+SET platform_winuwp=0
+SET platform_win32=0
+
+SET CPU_arm=0
+SET CPU_x86=0
+SET CPU_x64=0
+
+SET CONFIG_debug=0
+SET CONFIG_release=0
 
 ::log levels
 SET globalLogLevel=2											
@@ -55,18 +71,23 @@ SET debug=3
 SET trace=4														
 
 ::input arguments
-SET supportedInputArguments=;platform;target;help;logLevel;diagnostic;noEventing;					
+SET supportedInputArguments=;platform;cpu;config;target;help;logLevel;diagnostic;gn;server;		
 SET target=all
 SET platform=all
+SET cpu=all
+SET config=all
 SET help=0
 SET logLevel=2
 SET diagnostic=0
-SET noEventing=0
+SET server=0
+SET gn=1
 
 ::predefined messages
 SET errorMessageInvalidArgument="Invalid input argument. For the list of available arguments and usage examples, please run script with -help option."
 SET errorMessageInvalidTarget="Invalid target name. For the list of available targets and usage examples, please run script with -help option."
 SET errorMessageInvalidPlatform="Invalid platform name. For the list of available targets and usage examples, please run script with -help option."
+SET errorMessageInvalidCpu="Invalid cpu name. For the list of available targets and usage examples, please run script with -help option."
+SET errorMessageInvalidConfig="Invalid config name. For the list of available targets and usage examples, please run script with -help option."
 SET folderStructureError="ORTC invalid folder structure."
 
 CALL:precheck
@@ -74,7 +95,8 @@ CALL:precheck
 IF "%1"=="" (
 	CALL:print %warning% "Running script with default parameters: "
 	CALL:print %warning% "Target: all ^(Ortc and WebRtc^)"
-	CALL:print %warning% "Platform: all ^(x64, x86, arm and win32^)"
+	CALL:print %warning% "Platform: all ^(winuwp, win32^)"
+	CALL:print %warning% "Cpu: all ^(x64, x86, arm^)"
 	CALL:print %warning% "Log level: %logLevel% ^(warning^)"
 	SET defaultProperties=1
 )
@@ -114,6 +136,8 @@ GOTO parseInputArguments
 
 :main
 
+IF /I "%cpu%"=="win32" set cpu=x86
+
 CALL:showHelp
 
 ::Run diganostic if script is run in diagnostic mode
@@ -123,10 +147,13 @@ ECHO.
 CALL:print %info% "Running prepare script ..."
 ECHO.
 
+IF EXIST bin\Config.bat CALL bin\Config.bat
+
 IF %defaultProperties% EQU 0 (
 	CALL:print %warning% "Running script parameters:"
 	CALL:print %warning% "Target: %target%"
 	CALL:print %warning% "Platform: %platform%"
+	CALL:print %warning% "Cpu: %cpu%"
 	CALL:print %warning% "Log level: %logLevel%"
 	SET defaultProperties=1
 )
@@ -140,34 +167,47 @@ CALL:identifyTarget
 ::Determine targeted platforms
 CALL:identifyPlatform
 
-::Check for VS 2015
-CALL:ckeckVisualStudioPath 
+::Determine targeted platforms
+CALL:identifyCpu
 
-::Check for VC++ Tools
-CALL:ckeckVisualStudioBuildTools
-	
+::Determine targeted platforms
+CALL:identifyConfig
+
 ::Check is perl installed
 CALL:perlCheck
+
+::Check if git installed
+CALL:gitCheck
+
+::Check if depot_tools is in PATH environment
+CALL:depotToolsPathCheck
 
 ::Check if python is installed. If it isn't install it and add in the path
 CALL:pythonSetup
 
-::Generate WebRTC VS2015 projects from gyp files
-CALL:prepareWebRTC
 
-::Install ninja if missing
-IF %platform_win32% EQU 1 CALL:installNinja
-
-IF %prepare_ORTC_Environemnt% EQU 1 (
-	::Prepare ORTC development environment
-	CALL:prepareORTC
-
-	::Download curl and build it
-	CALL:prepareCurl
-	
-	CALL:prepareEventing
+IF %gn% EQU 1 (
+    CALL:prepareGN
 )
 
+::Generate WebRTC VS2015 projects from gn files
+CALL:prepareWebRTC
+
+
+IF %prepare_ORTC_Environment% EQU 1 (
+	REM Prepare ORTC development environment
+	CALL:prepareORTC
+
+	IF %platform_win32% EQU 1 (
+		REM Download curl and build it
+		CALL:prepareCurl
+	)
+	
+)
+
+IF %server% EQU 1 (
+    CALL:buildPeerCCServer
+)
 ::Finish script execution
 CALL:done
 
@@ -200,6 +240,14 @@ IF %ERRORLEVEL% EQU 1 (
 ) else (
 	CALL:print 1 "Python				    installed"
 )
+
+WHERE git > NUL 2>&1
+IF %ERRORLEVEL% EQU 1 (
+	CALL:print 0 "Git   				not installed"
+) else (
+	CALL:print 1 "Git   				    installed"
+)
+
 ECHO.
 CALL:print 2  "================================================================================"
 ECHO.
@@ -213,22 +261,22 @@ SET validInput=0
 SET messageText=
 
 IF /I "%target%"=="all" (
-	SET prepare_ORTC_Environemnt=%ortcAvailable%
-	SET prepare_WebRTC_Environemnt=1
+	SET prepare_ORTC_Environment=%ortcAvailable%
+	SET prepare_WebRTC_Environment=1
 	SET validInput=1
-	IF !prepare_ORTC_Environemnt! EQU 1 (
+	IF !prepare_ORTC_Environment! EQU 1 (
 		SET messageText=Preparing webRTC and ORTC development environment ...
 	) ELSE (
 		SET messageText=Preparing webRTC development environment ...
 		)
 ) ELSE (
 	IF /I "%target%"=="webrtc" (
-		SET prepare_WebRTC_Environemnt=1
+		SET prepare_WebRTC_Environment=1
 		SET validInput=1
 	)
 	IF /I "%target%"=="ortc" (
 	IF %ortcAvailable% EQU 0 CALL:ERROR 1 "ORTC is not available!"
-		SET prepare_ORTC_Environemnt=1
+		SET prepare_ORTC_Environment=1
 		SET validInput=1
 	)
 
@@ -245,31 +293,19 @@ IF !validInput!==1 (
 )
 GOTO:EOF
 
-REM Based on input arguments determine targeted platforms (x64, x86 or ARM)
+REM Based on input arguments determine targeted platforms (winuwp, win32)
 :identifyPlatform
 SET validInput=0
 SET messageText=
 
 IF /I "%platform%"=="all" (
-	SET platform_ARM=1
-	SET platform_x64=1
-	SET platform_x86=1
+	SET platform_winuwp=1
 	SET platform_win32=1
 	SET validInput=1
-	SET messageText=Preparing development environment for ARM, x64, x86 and win32 platforms ...
+	SET messageText=Preparing development environment for WinUWP and Win32 platforms ...
 ) ELSE (
-	IF /I "%platform%"=="arm" (
-		SET platform_ARM=1
-		SET validInput=1
-	)
-	
-	IF /I "%platform%"=="x64" (
-		SET platform_x64=1
-		SET validInput=1
-	)
-
-	IF /I "%platform%"=="x86" (
-		SET platform_x86=1
+	IF /I "%platform%"=="winuwp" (
+		SET platform_winuwp=1
 		SET validInput=1
 	)
 	
@@ -277,12 +313,7 @@ IF /I "%platform%"=="all" (
 		SET platform_win32=1
 		SET validInput=1
 	)
-	
-	IF /I "%platform%"=="win32_x64" (
-		SET platform_win32_x64=1
-		SET validInput=1
-	)
-	
+
 	IF !validInput!==1 (
 		SET messageText=Preparing development environment for %platform% platform...
 	)
@@ -295,6 +326,88 @@ IF !validInput!==1 (
 )
 GOTO:EOF
 
+
+REM Based on input arguments determine targeted cpu (x64, x86 or ARM)
+:identifyCpu
+SET validInput=0
+SET messageText=
+
+IF /I "%cpu%"=="all" (
+	SET cpu_arm=1
+	SET cpu_x86=1
+	SET cpu_x64=1
+	SET validInput=1
+	SET messageText=Preparing development environment for arm, x86, and x64 cpus ...
+) ELSE (
+	IF /I "%cpu%"=="arm" (
+		IF /I "%platform%"=="win32" (
+			CALL:print %warning% "Win32 ARM is not a valid target thus assuming an x86 cpu ..."
+			SET cpu=x86
+			SET cpu_x86=1
+			SET validInput=1
+		) ELSE (
+			SET cpu_arm=1
+			SET validInput=1
+		)
+	)
+	
+	IF /I "%cpu%"=="x86" (
+		SET cpu_x86=1
+		SET validInput=1
+	)
+
+	IF /I "%cpu%"=="x64" (
+		SET cpu_x86=1
+		SET validInput=1
+	)
+
+	IF !validInput!==1 (
+		SET messageText=Preparing development environment for %cpu% cpu...
+	)
+)
+:: If input is not valid terminate script execution
+IF !validInput!==1 (
+	CALL:print %warning% "!messageText!"
+) ELSE (
+	CALL:error 1 %errorMessageInvalidCpu%
+)
+GOTO:EOF
+
+
+REM Based on input arguments determine targeted config (debug/release)
+:identifyConfig
+SET validInput=0
+SET messageText=
+
+IF /I "%config%"=="all" (
+	SET CONFIG_debug=1
+	SET CONFIG_release=1
+	SET validInput=1
+	SET messageText=Preparing development environment for debug and release configurations ...
+) ELSE (
+	
+	IF /I "%config%"=="debug" (
+		SET CONFIG_debug=1
+		SET validInput=1
+	)
+
+	IF /I "%config%"=="release" (
+		SET CONFIG_release=1
+		SET validInput=1
+	)
+
+	IF !validInput!==1 (
+		SET messageText=Preparing development environment for %config% configuration...
+	)
+)
+:: If input is not valid terminate script execution
+IF !validInput!==1 (
+	CALL:print %warning% "!messageText!"
+) ELSE (
+	CALL:error 1 %errorMessageInvalidConfig%
+)
+GOTO:EOF
+
 REM Check if entered valid input argument
 :checkIfArgumentIsValid
 IF "!supportedInputArguments:;%~1;=!" neq "%supportedInputArguments%" (
@@ -304,32 +417,6 @@ IF "!supportedInputArguments:;%~1;=!" neq "%supportedInputArguments%" (
 	::it is not valid
 	SET %2=0
 )
-GOTO:EOF
-
-REM Check if Visual Studio 2015 is installed
-:ckeckVisualStudioPath
-
-SET progfiles=%ProgramFiles%
-
-IF NOT "%ProgramFiles(x86)%" == "" SET progfiles=%ProgramFiles(x86)%
-
-SET msVS_Path="%progfiles%\Microsoft Visual Studio 14.0"
-
-IF NOT EXIST %msVS_Path% CALL:error 1 "Visual Studio 2015 is not installed"
-
-GOTO:EOF
-
-REM Fix for Exception: C:\Program Files (x86)\Microsoft Visual Studio 14.0\VC\vcvarsall.bat is missing - make sure VC++ tools are installed.
-:ckeckVisualStudioBuildTools
-
-SET progfiles=%ProgramFiles%
-
-IF NOT "%ProgramFiles(x86)%" == "" SET progfiles=%ProgramFiles(x86)%
-
-REM Check if VC++ tools are installed for VS 2015 (VS 14.0 <=> VS 2015)
-SET vcToolsPath=%msVS_Path%\VC\vcvarsall.bat
-IF NOT EXIST %vcToolsPath% CALL:error 1 "VC++ tools are not installed for Visual Studio 2015."
-
 GOTO:EOF
 
 REM check if perl is installed
@@ -357,16 +444,35 @@ IF %ERRORLEVEL% EQU 1 (
 )
 GOTO:EOF
 
-:pythonSetup
-WHERE python > NUL 2>&1
+REM check if git is installed
+:gitCheck
+WHERE git > NUL 2>&1
 IF %ERRORLEVEL% EQU 1 (
-	CALL:print %warning%  "NOTE: Installing Python and continuing build..."
+	ECHO.
+	CALL:print 2  "================================================================================"
+	ECHO.
+	CALL:print 2  "Warning! Warning! Warning! Warning! Warning! Warning! Warning!"
+	ECHO.
+	CALL:print 2  "Git is missing."
+	CALL:print 2  "You need to have installed git to build projects properly."
+	ECHO.
+	CALL:print 2  "================================================================================"
+	ECHO.
+	CALL:print 2  "NOTE: Please restart your command shell after installing git and re-run this script..."	
+	ECHO.
+	
+	CALL:error 1 "git has to be installed before running prepare script!"
+	ECHO.	
+)
+GOTO:EOF
+
+:pythonDownloadAndInstall
 	CALL:print %debug%  "Installing Python ..."
 	CALL:download %pythonDownloadUrl% %pythonDestinationPath%
 	IF !taskFailed!==1 (
 		CALL:error 1  "Downloading python installer has failed. Script execution will be terminated. Please, run script once more, if python doesn't get installed again, please do it manually."
 	) ELSE (
-		START "Python install" /wait msiexec /i %pythonDestinationPath% /quiet
+		START "Python install" /wait msiexec /a %pythonDestinationPath% /quiet
 		IF !ERRORLEVEL! NEQ 0 (
 			CALL:error 1  "Python installation has failed. Script execution will be terminated. Please, run script once more, if python doesn't get installed again, please do it manually."
 		) ELSE (
@@ -388,33 +494,92 @@ IF %ERRORLEVEL% EQU 1 (
 	) else (
 		CALL:print %debug%  "Python is added to the path."
 	)
+GOTO:EOF
+	
+:pythonSetup
+WHERE python > NUL 2>&1
+IF %ERRORLEVEL% EQU 1 (
+	CALL:print %warning%  "NOTE: Installing Python and continuing build..."
+    CALL:pythonDownloadAndInstall
 ) ELSE (
 	CALL:print %trace%  "Python is present."
+	
+	:: check version that is installed
+    python -V > NUL 2> tmpPyVerFile.txt
+    set /p pyVer= < tmpPyVerFile.txt 
+    del tmpPyVerFile.txt 
+    CALL:print %trace% "!pyVer!"
+
+    for /f "tokens=2" %%a in ("!pyVer!") do (set verFound=%%a)
+    CALL:print %trace% "Currently installed Python version: !verFound!"
+
+    IF "!verFound!" GEQ "3.0" (
+        CALL:error 1 "Please install python 2.7, and in the PATH place it in front of python !verFound!"
+   )    
+   
+	for /f "tokens=3 delims=." %%a in ("!verFound!") do (set /a ver27Found=%%a)
+	CALL:print %trace% "Currently installed Python 2.7 subversion: !ver27Found!"
+   
+    IF !ver27Found! LSS 15 (
+		CALL:print %trace% "Installing the latest Python 2.7 version"
+        :: rename old Python, random is used to prevent error on renaming
+	    IF EXIST C:\Python27\nul (
+		    REN C:\Python27 Python27_VERSION_!verFound!_RANDOM_SUFFIX_%RANDOM%
+		) 
+	    IF EXIST D:\Python27\nul (
+		    REN D:\Python27 Python27_VERSION_!verFound!_RANDOM_SUFFIX_%RANDOM%		
+		)
+        :: install the latest Python 2.7 version
+	    CALL:pythonDownloadAndInstall
+   )      
 )
+
+CALL:print %warning%  "Pip and pywin32 setup..."
+::echo %PATH%
+CALL bin\addPathToEnvPATH.bat %pythonPipPath% 
+::echo %PATH%
+
+WHERE pip > NUL 2>&1
+IF %ERRORLEVEL% EQU 1 (
+	CALL:print %debug%  "Installing Python Pip..."
+	CALL:download %pythonPipUrl% %pythonPipDestinationPath%
+    python %pythonPipDestinationPath%
+) ELSE (
+	CALL:print %trace%  "Pip is present."   
+)
+
+IF NOT EXIST %pywin32VersionFile% (
+	CALL:print %trace% "Updating pip ..."
+    python.exe -m pip install --upgrade pip
+    IF !ERRORLEVEL! NEQ 0 (
+		CALL:error 1  "Unable to update Python pip tool."
+    )
+    CALL:print %trace% "Installing pywin32..."
+	pip install pywin32
+    IF !ERRORLEVEL! NEQ 0 (
+		CALL:error 1  "Unable to install pywin32 module."
+    )
+) ELSE (
+	CALL:print %trace% "pywin32 already exists"
+)
+
+IF EXIST get-pip.py DEL /f /q get-pip.py
 
 GOTO:EOF
 
+
 :prepareORTC
-
-:: Create solutions folder where will be stored links to real solutions
-::CALL:makeDirectory .\solutions
-
-:: Make link to ortc-lib-sdk-win.vs2015 solution
-::CALL:makeLinkToFile solutions\ortc-lib-sdk-win.vs20151.sln ortc\windows\wrapper\projects\ortc-lib-sdk-win.vs2015.sln
-
-:: Copy webrtc solution template
-CALL:copyTemplates %ortcWebRTCTemplatePath% %ortcWebRTCDestinationPath%
-CALL:copyTemplates %ortcWebRTCWin32TemplatePath% %ortcWebRTCWin32DestinationPath%
-::CALL:copyTemplates %webRTCTemplatePath% %webRTCDestinationPath%
-
-::START solutions\ortc-lib-sdk-win.vs20151.sln
 
 GOTO:EOF
 
 ::Generate WebRTC projects
 :prepareWebRTC
 
-CALL bin\prepareWebRtc.bat -platform %platform% -logLevel %logLevel%
+IF %prepare_ORTC_Environment% EQU 1 (
+  CALL bin\prepareWebRtc.bat -platform %platform% -cpu %cpu% -config %config% -logLevel %logLevel% -target ortc
+) ELSE (
+  CALL bin\prepareWebRtc.bat -platform %platform% -cpu %cpu% -config %config% -logLevel %logLevel%
+)
 
 GOTO:EOF
 
@@ -435,28 +600,87 @@ CALL prepareCurl.bat -logLevel %globalLogLevel%
 ::	CALL prepare.bat curl  >NUL
 ::)
 
-if !ERRORLEVEL! EQU 1 CALL:error 1 "Curl preparation has failed."
+IF !ERRORLEVEL! EQU 1 CALL:error 1 "Curl preparation has failed."
 
 POPD > NUL
 
 GOTO:EOF
 
-::Generate events providers
-:prepareEventing
+:prepareGN
 
-IF %noEventing% EQU 0 (
-	CALL bin\prepareEventing.bat -platform x64 -logLevel %logLevel%
-	CALL bin\prepareEventing.bat -platform x86 -logLevel %logLevel%
-	CALL bin\prepareEventing.bat -platform win32 -logLevel %logLevel%
+CALL:cleanup
+
+CALL:makeDirectory %ortcGNPath%
+CALL:makeDirectory webrtc\xplatform\webrtc\third_party\idl
+
+IF NOT EXIST %webrtcGnPath%originalBuild.gn COPY %webrtcGnPath%BUILD.gn %webrtcGnPath%originalBuild.gn
+IF !ERRORLEVEL! EQU 1 CALL:error 1 "Failed renamed original webrtc build.gn file" 
+
+IF %prepare_ORTC_Environment% EQU 1 (
+	%powershell_path% -ExecutionPolicy ByPass -File bin\TextReplaceInFile.ps1 !webrtcGnBuildPathDestination! """":webrtc"","" """":webrtc"",""""//third_party/ortc:ortc"""","" !webrtcGnBuildPathDestination!
+	IF ERRORLEVEL 1 CALL:error 1 "Failed updating gn to include ORTC target"
+)
+
+%powershell_path% -ExecutionPolicy ByPass -File bin\TextReplaceInFile.ps1 !webrtcGnBuildPathDestination! """"pc"","" """"pc"",""""//third_party/idl:idl"""","" !webrtcGnBuildPathDestination!
+IF ERRORLEVEL 1 CALL:error 1 "Failed updating gn to include IDL target"
+
+IF %prepare_ORTC_Environment% EQU 1 (
+	CALL:copyTemplates %ortcGnBuildPath% %ortcGnBuildPathDestination%
+)
+CALL:copyTemplates %idlGnBuildPath% %idlGnBuildPathDestination%
+
+IF %prepare_ORTC_Environment% EQU 1 (
+	IF !platform_win32! EQU 1 (
+	    CALL:makeLink . webrtc\xplatform\webrtc\third_party\ortc\curl ortc\xplatform\curl
+	)
 )
 
 GOTO:EOF
+
+:buildPeerCCServer
+  IF NOT "%platform%"=="all" (
+    IF NOT "%platform%"=="win32" CALL bin\prepareWebRtc.bat -platform win32 -cpu x86 -config release -logLevel %logLevel%
+  )
+
+  CALL:print %info% "Building PeerConnection server"
+  CALL bin\buildWebRtc.bat Release win32 x86 webrtc/examples:peerconnection_server
+  IF !ERRORLEVEL! EQU 0 (
+    CALL:copyTemplates webrtc\xplatform\webrtc\out\win_x86_release\peerconnection_server.exe .\bin\
+  )
+GOTO:EOF
+
+:downloadBinariesFromRepo
+ECHO.
+CALL:print %info% "Donwloading binaries from repo !BINARIES_DOWNLOAD_REPO_URL!"
+IF EXIST ..\ortc-binaries\NUL RMDIR /q /s ..\ortc-binaries\
+	
+PUSHD ..\
+CALL git clone !BINARIES_DOWNLOAD_REPO_URL! -b !BINARIES_DOWNLOAD_REPO_BRANCH! > NUL
+IF !ERRORLEVEL! EQU 1 CALL:error 1 "Failed cloning binaries."
+POPD
+	
+CALL:makeDirectory %ortciOSBinariesDestinationFolder%
+CALL:copyTemplates ..\ortc-binaries\Release\libOrtc.dylib %ortciOSBinariesDestinationPath%
+	
+IF EXIST ..\ortc-binaries\NUL RMDIR /q /s ..\ortc-binaries\
+GOTO:EOF
+
+:downloadBinariesFromURL
+ECHO.
+CALL:print %info% "Donwloading binaries from URL !BINARIES_DOWNLOAD_URL!"
+
+CALL:makeDirectory %ortciOSBinariesDestinationFolder%
+CALL:download !BINARIES_DOWNLOAD_URL! %ortciOSBinariesDestinationPath%
+IF !taskFailed! EQU 1 CALL:ERROR 1 "Failed downloading binaries from !BINARIES_DOWNLOAD_URL!"
+
+GOTO:EOF
+
 
 REM Download file (first argument) to desired destination (second argument)
 :download
 IF EXIST %~2 GOTO:EOF
 ::%powershell_path% "Start-BitsTransfer %~1 -Destination %~2"
-%powershell_path% -Command [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12;(new-object System.Net.WebClient).DownloadFile('%~1','%~2') 
+%powershell_path% -Command [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12;(new-object System.Net.WebClient).DownloadFile('%~1','%~2')
 
 IF %ERRORLEVEL% EQU 1 SET taskFailed=1
 
@@ -556,7 +780,7 @@ GOTO:EOF
 REM Create symbolic link (first argument), that will point to desired file (second argument)
 :makeLinkToFile
 
-IF EXIST %~1 GOTO:alreadyexists
+IF EXIST %~1 GOTO:filelinkalreadyexists
 IF NOT EXIST %~2 CALL:error 1 "%folderStructureError:"=% %~2 does not exist!"
 
 CALL:print %trace% Creating symbolic link "%~1" for the file "%~2"
@@ -570,8 +794,28 @@ IF %logLevel% GEQ %trace% (
 )
 IF %ERRORLEVEL% NEQ 0 CALL:ERROR 1 "COULD NOT CREATE SYMBOLIC LINK TO %~2"
 
+:filelinkalreadyexists
+
+GOTO:EOF
+:makeLink
+IF NOT EXIST %~1\NUL CALL:error 1 "%folderStructureError:"=% %~1 does not exist!"
+
+::PUSHD %~1
+IF EXIST .\%~2\NUL GOTO:alreadyexists
+IF NOT EXIST %~3\NUL CALL:error 1 "%folderStructureError:"=% %~3 does not exist!"
+
+CALL:print %trace% In path "%~1" creating symbolic link for "%~2" to "%~3"
+
+IF %logLevel% GEQ %trace% (
+	MKLINK /J %~2 %~3
+) ELSE (
+	MKLINK /J %~2 %~3  >NUL
+)
+
+IF %ERRORLEVEL% NEQ 0 CALL:ERROR 1 "COULD NOT CREATE SYMBOLIC LINK TO %~2 FROM %~3"
+
 :alreadyexists
-POPD
+::  POPD
 
 GOTO:EOF
 
@@ -580,11 +824,12 @@ REM Copy all ORTC template required to set developer environment
 
 IF NOT EXIST %~1 CALL:error 1 "%folderStructureError:"=% %~1 does not exist!"
 
+echo COPY %~1 %~2
 COPY %~1 %~2 >NUL
 
 CALL:print %trace% Copied file %~1 to %~2
 
-IF %ERRORLEVEL% NEQ 0 CALL:error 1 "%folderStructureError:"=% Unable to copy WebRTC temaple solution file"
+IF %ERRORLEVEL% NEQ 0 CALL:error 1 "%folderStructureError:"=% Unable to copy WebRTC template solution file"
 
 GOTO:EOF
 
@@ -592,32 +837,6 @@ GOTO:EOF
 IF EXIST ortc\NUL SET ortcAvailable=1
 GOTO:EOF
 
-:installNinja
-
-WHERE ninja > NUL 2>&1
-IF !ERRORLEVEL! EQU 1 (
-
-	CALL:print %trace% "Ninja is not in the path"
-	
-	IF NOT EXIST .\bin\ninja.exe (
-		CALL:print %trace% "Downloading ninja ..."
-		CALL:download %ninjaDownloadUrl% %ninjaDestinationPath%
-
-		IF EXIST .\bin\ninja-win.zip (
-			CALL::print %trace% "Unarchiving ninja-win.zip ..."
-			CALL:unzipfile "%~dp0" "%~dp0ninja-win.zip" 
-		) ELSE (
-			CALL:error 0 "Ninja is not installed. Win32 projects cwon't be buildable."
-		)
-	)
-	
-	IF EXIST .\bin\ninja.exe (
-		CALL::print %trace% "Updating projects ..."
-		START /B /wait .\bin\upn.exe .\bin\ .\webrtc\xplatform\webrtc\ .\webrtc\xplatform\webrtc\chromium\src\
-	)
-)
-
-GOTO:EOF
 
 :unzipfile 
 SET vbs="%temp%\_.vbs"
@@ -636,6 +855,51 @@ IF EXIST %vbs% DEL /f /q %vbs%
 DEL /f /q %2
 GOTO:EOF
 
+
+:depotToolsPathCheck
+CALL:print %trace% "depotToolsPathCheck entered..."
+
+SET numberOfRemoved=0
+SET oldPath=%PATH%
+rem echo Old path: !oldPath!
+
+FOR %%A IN ("%path:;=";"%") DO (
+rem    echo %%~A
+    SET aux3=%%~A\depot-tools-auth
+rem    echo !aux3! 
+    
+    IF EXIST "!aux3!" (
+rem     echo Before modification !PATH! 
+        echo Remove %%~A from path       
+        CALL SET PATH=%%PATH:;%%~A=%%
+        CALL SET PATH=%%PATH:%%~A;=%%
+rem     echo Modified path: !PATH!
+
+        SET /A numberOfRemoved=numberOfRemoved+1
+        CALL:print %trace% "numberOfRemoved: !numberOfRemoved!"        
+    ) 
+)
+GOTO:EOF
+
+
+:restorePathEnv
+CALL:print %trace% "restorePathEnv entered..."
+CALL:print %trace% "Number of paths temporarily removed from environment PATH: !numberOfRemoved!"
+
+IF %numberOfRemoved% GTR 0  (     
+    set PATH=!oldPath!
+)
+rem echo Restored PATH = !PATH!
+GOTO:EOF
+
+
+:cleanup
+IF EXIST %webrtcGnPath%originalBuild.gn (
+    DEL %webrtcGnPath%BUILD.gn
+    REN %webrtcGnPath%originalBuild.gn BUILD.gn
+)
+GOTO:EOF
+
 :showHelp
 IF %help% EQU 0 GOTO:EOF
 
@@ -648,11 +912,13 @@ ECHO 	[93m-help[0m 		Show script usage
 ECHO.
 ECHO 	[93m-logLevel[0m	Log level (error=0, info =1, warning=2, debug=3, trace=4)
 ECHO.
-ECHO		[93m-noEventing[0m 	Flag not to run eventing preparations for Ortc
-ECHO.
 ECHO 	[93m-target[0m		Name of the target to prepare environment for. Ortc or WebRtc. If this parameter is not set dev environment will be prepared for both available targets.
 ECHO.
-ECHO		[93m-platform[0m 	Platform name to set environment for. Default is All (win32,x86,x64,arm)
+ECHO		[93m-platform[0m 	Platform name to set environment for. Default is All (winuwp,win32)
+ECHO.
+ECHO		[93m-cpu[0m 	Cpu name to set environment for. Default is All (arm,x86,x64)
+ECHO.
+ECHO		[93m-config[0m 	Config name to set environment for. Default is All (debug,release)
 ECHO.
 CALL bin\batchTerminator.bat
 
@@ -689,6 +955,7 @@ IF %criticalError%==0 (
 	ECHO.
 	CALL:print %error% "FAILURE:Preparing environment has failed!"
 	ECHO.
+    CALL:cleanup
 	SET endTime=%time%
 	CALL:showTime
 	::terminate batch execution
@@ -726,6 +993,8 @@ GOTO:EOF
 :done
 ECHO.
 CALL:print %info% "Success: Development environment is set."
+CALL:cleanup
+CALL:restorePathEnv
 SET endTime=%time%
 CALL:showTime
 ECHO. 

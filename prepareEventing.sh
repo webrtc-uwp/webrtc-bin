@@ -12,7 +12,7 @@ trace=4
 eventsIncludePath=../Internal
 eventsIntermediatePath=IntermediateTemp
 eventsOutput=$PWD/ortc/Apple/workspace/eventing/
-compilerPath=$PWD/bin/eventing/zsLib.Eventing.Compiler.Tool
+compilerPath=$PWD/bin/eventing/zslib-eventing-tool-compiler
 
 
 print()
@@ -88,19 +88,34 @@ buildEventCompiler()
 		xcodebuild -workspace zsLib-Eventing.xcworkspace -scheme "zsLib.Eventing.Compiler.Tool" -configuration "Release" -derivedDataPath "./zsLib.Eventing.Compiler.Tool-osx.Tool/output/" > /dev/null
 	fi
   if (( $? )); then
-    error 1 "zsLib.Eventing.Compiler.Tool compilation has failed"
+    error 1 "zslib-eventing-tool-compiler compilation has failed"
   else
     print $warning "Event compiler is built successfully"
   fi
 
   make_directory ../../../../../bin/eventing/
 
-  if [ -f ./zsLib.Eventing.Compiler.Tool-osx.Tool/output/Build/Products/Release/zsLib.Eventing.Compiler.Tool ] && [ -f ./zsLib.Eventing.Compiler.Tool-osx.Tool/output/Build/Products/Release/libcryptopp-osx.a ]
+  if [ -f ./zsLib.Eventing.Compiler.Tool-osx.Tool/output/Build/Products/Release/zslib-eventing-tool-compiler ] && [ -f ./zsLib.Eventing.Compiler.Tool-osx.Tool/output/Build/Products/Release/libcryptopp-osx.a ]
   then
-    cp ./zsLib.Eventing.Compiler.Tool-osx.Tool/output/Build/Products/Release/zsLib.Eventing.Compiler.Tool ../../../../../bin/eventing/zsLib.Eventing.Compiler.Tool
+    cp ./zsLib.Eventing.Compiler.Tool-osx.Tool/output/Build/Products/Release/zslib-eventing-tool-compiler ../../../../../bin/eventing/zslib-eventing-tool-compiler
     cp ./zsLib.Eventing.Compiler.Tool-osx.Tool/output/Build/Products/Release/libcryptopp-osx.a ../../../../../bin/eventing/libcryptopp-osx.a
   fi
 
+  popd > /dev/null
+}
+
+compileIdl()
+{
+  print $warning "Compiling IDL files..."
+
+  eventPath=./ortc/xplatform/ortclib-cpp/ortc/idl
+
+  pushd $eventPath > /dev/null
+  $compilerPath -idl cx c dotnet json wrapper -c config.json -o . > /dev/null
+  if (( $? )); then
+    popd > /dev/null
+    error 1 "$providerName event compilation has failed"
+  fi
   popd > /dev/null
 }
 
@@ -121,10 +136,11 @@ compileEvent()
 
   pushd $eventPath > /dev/null
   $compilerPath -c ./$filename -o $eventsIncludePath/$providerName  > /dev/null
-  popd > /dev/null
   if (( $? )); then
+    popd > /dev/null
     error 1 "$providerName event compilation has failed"
   fi
+  popd > /dev/null
 }
 
 finished()
@@ -146,11 +162,20 @@ done
 echo
 print $info "Running prepare eventing script ..."
 
+if [ "$OSTYPE" == "linux-gnu" ]; then
+  HOST_SYSTEM=linux
+else
+  HOST_SYSTEM=mac
+fi
 #Main flow
 buildEventCompiler
 
 for f in $(find ./ortc -name '*.events.json'); do
   compileEvent "$f"
 done
+
+if [ "$HOST_SYSTEM" == "mac" ]; then
+  compileIdl
+fi
 
 finished

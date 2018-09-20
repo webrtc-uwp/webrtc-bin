@@ -3,8 +3,8 @@ setlocal EnableDelayedExpansion
 
 set CONFIGURATION=%1
 set PLATFORM=%2
-set SOLUTIONPATH=winrt\projects\ortc-lib-sdk-win.vs2015.sln
-set PROJECTPATH=winrt\projects\ortc-template.csproj
+set SOLUTIONPATH=winuwp\projects\ortc-lib-sdk-win.vs2015.sln
+set PROJECTPATH=winuwp\projects\ortc-template.csproj
 set MSVCDIR=""
 set failure=0
 set x86BuildCompilerOption=amd64_x86
@@ -43,7 +43,7 @@ goto:eof
 :setCompilerOption
 
 reg Query "HKLM\Hardware\Description\System\CentralProcessor\0" | find /i "x86" > NUL && set CPU=x86 || set CPU=x64
-echo CPU arhitecture is %CPU%
+echo CPU architecture is %CPU%
 
 if %CPU% == x86 (
 	set x86BuildCompilerOption=x86
