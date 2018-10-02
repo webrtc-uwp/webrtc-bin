@@ -346,6 +346,7 @@ CALL:makeLink . chromium\src\third_party\boringssl ..\chromium\third_party\borin
 CALL:makeLink . chromium\src\third_party\usrsctp ..\chromium\third_party\usrsctp
 CALL:makeLink . chromium\src\third_party\libvpx ..\chromium\third_party\libvpx
 CALL:makeLink . chromium\src\third_party\libvpx\source\libvpx ..\libvpx
+CALL:makeLink . chromium\src\third_party\rnnoise ..\chromium\third_party\rnnoise
 CALL:makeLink . chromium\src\testing ..\chromium\testing
 CALL:makeLink . testing chromium\src\testing
 CALL:makeLink . base ..\chromium\base
@@ -371,6 +372,7 @@ CALL:makeLink . third_party\libyuv ..\libyuv
 CALL:makeLink . third_party\openmax_dl ..\openmax
 CALL:makeLink . third_party\libjpeg_turbo ..\libjpeg_turbo
 CALL:makeLink . third_party\abseil-cpp chromium\src\third_party\abseil-cpp
+CALL:makeLink . third_party\rnnoise chromium\src\third_party\rnnoise
 CALL:makeLink . third_party\jsoncpp chromium\src\third_party\jsoncpp
 CALL:makeLink . third_party\winuwp_compat ..\..\windows\third_party\winuwp_compat
 CALL:makeLink . third_party\winuwp_h264 ..\..\windows\third_party\winuwp_h264
@@ -411,10 +413,11 @@ GOTO:EOF
 ::XCopy  /S /I /Y ..\gflags-build third_party\gflags > NUL
 ::IF !errorlevel! NEQ 0 CALL:error 1 "Missing gn files for gflags"
 
-COPY ..\chromium\third_party\BUILD.gn third_party\BUILD.gn 
-COPY ..\chromium\third_party\DEPS third_party\DEPS 
-COPY ..\chromium\third_party\OWNERS third_party\OWNERS 
-COPY ..\chromium\third_party\PRESUBMIT.py third_party\PRESUBMIT.py 
+COPY /Y ..\chromium\third_party\*.gn third_party\*.gn 
+COPY /Y ..\chromium\third_party\*.gni third_party\*.gni
+COPY /Y ..\chromium\third_party\DEPS third_party\DEPS 
+COPY /Y ..\chromium\third_party\OWNERS third_party\OWNERS 
+COPY /Y ..\chromium\third_party\*.py third_party\*.py 
 GOTO:EOF
 
 :setupDepotTools
