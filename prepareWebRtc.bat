@@ -68,6 +68,9 @@ SET webRTCGnArgsTemplatePath=..\..\..\webrtc\windows\templates\gns\args.gn
 
 SET stringToUpdateWithSDKVersion='WindowsTargetPlatformVersion', '10.0.10240.0'
 SET pythonFilePathToUpdateSDKVersion=webrtc\xplatform\webrtc\tools\gyp\pylib\gyp\generator\msvs.py
+
+SET lastChangeScriptPath=build\util
+
 ECHO.
 CALL:print %info% "Running WebRTC prepare script ..."
 CALL:print %info% "================================="
@@ -295,6 +298,8 @@ IF %platform_win32% EQU 1 (
 
 CALL:setupDepotTools
 
+CALL:fixLastChange
+
 CALL:downloadGnBinaries
 ::POPD
 ::CALL:updateSDKVersion
@@ -426,6 +431,23 @@ IF !ERRORLEVEL! EQU 1 (
 		set "PATH=%PATH%;%DepotToolsPath%"
     )
 )
+
+GOTO:EOF
+
+:fixLastChange
+
+IF NOT EXIST %lastChangeScriptPath%\NUL CALL:error 1 "Last change script path does not exist: %lastChangeScriptPath%"
+IF NOT EXIST %lastChangeScriptPath%\lastchange.py CALL:error 1 "Last change script does not exist: %lastChangeScriptPath%\lastchange.py"
+
+PUSHD %lastChangeScriptPath% > NUL
+IF !errorlevel! NEQ 0 CALL:error 1 "Failed change to last change path: %lastChangeScriptPath%"
+
+CALL python lastchange.py -o LASTCHANGE
+IF !errorlevel! NEQ 0 CALL:error 1 "Failed in call to lastchange.py: %lastChangeScriptPath%\lastchange.py"
+
+lastChangeScriptPath
+
+POPD > NUL
 
 GOTO:EOF
 
