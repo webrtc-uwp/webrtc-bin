@@ -335,6 +335,7 @@ CALL:print %trace% "Executing makeJunctionLinks function"
 
 CALL:makeLink . buildtools ..\buildtools
 CALL:makeLink . build ..\chromium\build
+CALL:makeLink . chromium\src\third_party\abseil-cpp ..\chromium\third_party\abseil-cpp
 CALL:makeLink . chromium\src\third_party\jsoncpp ..\chromium\third_party\jsoncpp
 CALL:makeLink . chromium\src\third_party\jsoncpp\source ..\jsoncpp
 CALL:makeLink . chromium\src\tools\protoc_wrapper ..\chromium\tools\protoc_wrapper
@@ -369,6 +370,7 @@ CALL:makeLink . third_party\libvpx .\chromium\src\third_party\libvpx
 CALL:makeLink . third_party\libyuv ..\libyuv
 CALL:makeLink . third_party\openmax_dl ..\openmax
 CALL:makeLink . third_party\libjpeg_turbo ..\libjpeg_turbo
+CALL:makeLink . third_party\abseil-cpp chromium\src\third_party\abseil-cpp
 CALL:makeLink . third_party\jsoncpp chromium\src\third_party\jsoncpp
 CALL:makeLink . third_party\winuwp_compat ..\..\windows\third_party\winuwp_compat
 CALL:makeLink . third_party\winuwp_h264 ..\..\windows\third_party\winuwp_h264
@@ -444,8 +446,6 @@ IF !errorlevel! NEQ 0 CALL:error 1 "Failed change to last change path: %lastChan
 
 CALL python lastchange.py -o LASTCHANGE
 IF !errorlevel! NEQ 0 CALL:error 1 "Failed in call to lastchange.py: %lastChangeScriptPath%\lastchange.py"
-
-lastChangeScriptPath
 
 POPD > NUL
 
