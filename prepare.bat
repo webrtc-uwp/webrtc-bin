@@ -25,7 +25,9 @@ SET ortcGnBuildPath=ortc\xplatform\templates\gn\ortc_BUILD.gn
 SET ortcGnBuildPathDestination=webrtc\xplatform\webrtc\third_party\ortc\BUILD.gn
 
 SET idlGnBuildPath=webrtc\xplatform\templates\gn\idl_BUILD.gn
+SET idlGniToolsBuildPath=webrtc\xplatform\templates\gn\tool_build.gni
 SET idlGnBuildPathDestination=webrtc\xplatform\webrtc\third_party\idl\BUILD.gn
+SET idlGniToolsBuildPathDestination=webrtc\xplatform\webrtc\third_party\idl\tool_build.gni
 SET pythonPipPath=C:\Python27\Scripts
 SET pywin32VersionFile=C:\Python27\Lib\site-packages\pywin32.version.txt
 
@@ -628,6 +630,8 @@ IF %prepare_ORTC_Environment% EQU 1 (
 	CALL:copyTemplates %ortcGnBuildPath% %ortcGnBuildPathDestination%
 )
 CALL:copyTemplates %idlGnBuildPath% %idlGnBuildPathDestination%
+
+CALL:copyTemplates %idlGniToolsBuildPath% %idlGniToolsBuildPathDestination%
 
 IF %prepare_ORTC_Environment% EQU 1 (
 	IF !platform_win32! EQU 1 (
