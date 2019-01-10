@@ -283,14 +283,20 @@ IF NOT EXIST %destinationExes%\NUL (
   IF ERRORLEVEL 1 CALL:error 1 "Could not make a directory %destinationExes%"
 )
 
-echo COPY %libsSourcePath%\*.exe %destinationExes%\*.exe /Y
-COPY %libsSourcePath%\*.exe %destinationExes%\*.exe /Y >NUL
+IF EXIST %libsSourcePath%\*.exe (
+  echo COPY %libsSourcePath%\*.exe %destinationExes%\*.exe /Y
+  COPY %libsSourcePath%\*.exe %destinationExes%\*.exe /Y >NUL
+)
 
-echo COPY %libsSourcePath%\*.pdb %destinationExes%\*.pdb /Y
-COPY %libsSourcePath%\*.pdb %destinationExes%\*.pdb /Y >NUL
+IF EXIST %libsSourcePath%\*.pdb (
+  echo COPY %libsSourcePath%\*.pdb %destinationExes%\*.pdb /Y
+  COPY %libsSourcePath%\*.pdb %destinationExes%\*.pdb /Y >NUL
+)
 
+IF EXIST %libsSourcePath%\*.dll (
 echo COPY %libsSourcePath%\*.dll %destinationExes%\*.dll /Y
 COPY %libsSourcePath%\*.dll %destinationExes%\*.dll /Y >NUL
+)
 
 GOTO:EOF
 
@@ -411,8 +417,13 @@ CALL:combineLibsFromFolder %libsSourcePath%obj .o
 
 CALL:combineLibsFromFolder %libsSourcePath%gen .obj
 
-
 CALL:combineLibsFromFolder %libsSourcePath%gen .o
+
+IF /I "!PLATFORM!"=="winuwp" (
+  IF EXIST %libsSourcePath%uwp_!CPU! (
+    CALL:combineLibsFromFolder %libsSourcePath%uwp_!CPU! .obj
+  )
+)
 
 CALL:print %debug% "Finished merging objs into !webRtcLibs!"
 
@@ -452,7 +463,19 @@ REM POPD
 CALL:print %debug% "Copying pdbs from %libsSourcePath%obj to %destinationPath%"
 
 PUSHD %libsSourcePath%obj
-FOR /f %%A IN ('forfiles -p %libsSourcePath%obj /s /m *.pdb /c "CMD /c ECHO @relpath"') DO ( SET temp=%%~A && IF "!temp!"=="!temp:protobuf_full_do_not_use=!" COPY %%~A %destinationPath% >NUL )
+
+FOR /f %%A IN ('forfiles -p %libsSourcePath%obj /s /m *.pdb /c "CMD /c ECHO @relpath" 2^>^&1' ) DO ( 
+  SET temp=%%~A
+  IF "!temp!"=="!temp:ERROR:=!" (
+    IF "!temp!"=="!temp:protobuf_full_do_not_use=!" (
+      CALL:print %debug% "Copying !temp!"
+      COPY !temp! %destinationPath%
+    )
+  ) ELSE (
+    CALL:print %debug% "There are no pdb files."
+  )
+)
+
 POPD
 
 REM IF ERRORLEVEL 1 CALL:error 0 "Failed copying pdb files"
