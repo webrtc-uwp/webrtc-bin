@@ -22,7 +22,9 @@ SET webrtcGnPath=webrtc\xplatform\webrtc\
 SET ortcGnPath=webrtc\xplatform\webrtc\third_party\ortc\
 SET webrtcGnBuildPathDestination=webrtc\xplatform\webrtc\BUILD.gn
 SET ortcGnBuildPath=ortc\xplatform\templates\gn\ortc_BUILD.gn
+SET idlGniToolsBuildPath=webrtc\xplatform\templates\gn\tool_build.gni
 SET ortcGnBuildPathDestination=webrtc\xplatform\webrtc\third_party\ortc\BUILD.gn
+SET idlGniToolsBuildPathDestination=webrtc\xplatform\webrtc\third_party\idl\tool_build.gni
 
 SET idlGnBuildPath=webrtc\xplatform\templates\gn\idl_BUILD.gn
 SET idlGnBuildPathDestination=webrtc\xplatform\webrtc\third_party\idl\BUILD.gn
@@ -628,6 +630,8 @@ IF %prepare_ORTC_Environment% EQU 1 (
 	CALL:copyTemplates %ortcGnBuildPath% %ortcGnBuildPathDestination%
 )
 CALL:copyTemplates %idlGnBuildPath% %idlGnBuildPathDestination%
+
+CALL:copyTemplates %idlGniToolsBuildPath% %idlGniToolsBuildPathDestination%
 
 IF %prepare_ORTC_Environment% EQU 1 (
 	IF !platform_win32! EQU 1 (
